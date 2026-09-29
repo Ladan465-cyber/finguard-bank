@@ -283,6 +283,7 @@ def confirm_facial_verification(db: Session, user, transaction_id: str, live_des
         )
 
     matched, distance = face_service.is_match(user.face_descriptor, live_descriptor)
+        print(f"[FinShield DEBUG] face match distance={distance}, matched={matched}, threshold={face_service.MATCH_THRESHOLD}")
 
     if not matched:
         if va:

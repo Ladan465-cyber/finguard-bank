@@ -1,6 +1,11 @@
 import axios from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// In local development (two separate dev servers), default to the backend
+// running on :8000. In a production build with no VITE_API_URL set, default
+// to '' (a relative/same-origin base) -- this is what makes the merged
+// single-service deployment (backend serving the built frontend) work with
+// zero environment variables and zero CORS requests.
+const BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:8000')
 
 export const api = axios.create({ baseURL: BASE_URL })
 
