@@ -66,19 +66,20 @@ export async function captureWithLiveness(
     }
 
     console.log('[FinShield DEBUG] sample', sampleCount, '-> detection found:', !!detection, detection ? `score=${detection.detection.score.toFixed(3)}` : '')
-
+console.log('[FinShield DEBUG] minEAR over capture:', minEAR, '| threshold:', blinkThreshold, '| framesWithFace:', framesWithFace, '/', sampleCount)
     if (detection) {
-      framesWithFace += 1
-      const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye())
-      const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye())
-      const avgEAR = (leftEAR + rightEAR) / 2
-      if (avgEAR < minEAR) minEAR = avgEAR
+  framesWithFace += 1
+  const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye())
+  const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye())
+  const avgEAR = (leftEAR + rightEAR) / 2
+  console.log('[FinShield DEBUG] sample', sampleCount, 'avgEAR:', avgEAR.toFixed(3), '(left:', leftEAR.toFixed(3), 'right:', rightEAR.toFixed(3), ')')
+  if (avgEAR < minEAR) minEAR = avgEAR
 
-      if (detection.detection.score > bestScore) {
-        bestScore = detection.detection.score
-        bestDetection = detection
-      }
-    }
+  if (detection.detection.score > bestScore) {
+    bestScore = detection.detection.score
+    bestDetection = detection
+  }
+}
     await new Promise((resolve) => setTimeout(resolve, sampleIntervalMs))
   }
 
