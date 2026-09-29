@@ -44,17 +44,28 @@ export async function captureWithLiveness(
   videoEl,
   { durationMs = 2500, sampleIntervalMs = 150, blinkThreshold = 0.23 } = {}
 ) {
-  const start = Date.now()
+    const start = Date.now()
   let minEAR = Infinity
   let framesWithFace = 0
   let bestDetection = null
   let bestScore = -1
+  let sampleCount = 0
+
+  console.log('[FinShield DEBUG] video element size:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'readyState:', videoEl.readyState)
 
   while (Date.now() - start < durationMs) {
-    const detection = await faceapi
-      .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
-      .withFaceLandmarks()
-      .withFaceDescriptor()
+    sampleCount += 1
+    let detection = null
+    try {
+      detection = await faceapi
+        .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor()
+    } catch (err) {
+      console.log('[FinShield DEBUG] detection threw an error on sample', sampleCount, ':', err)
+    }
+
+    console.log('[FinShield DEBUG] sample', sampleCount, '-> detection found:', !!detection, detection ? `score=${detection.detection.score.toFixed(3)}` : '')
 
     if (detection) {
       framesWithFace += 1
