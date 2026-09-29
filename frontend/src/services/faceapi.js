@@ -42,12 +42,11 @@ function eyeAspectRatio(eyePoints) {
  */
 export async function captureWithLiveness(
   videoEl,
-  { durationMs = 2500, sampleIntervalMs = 150, blinkThreshold = 0.23 } = {}
+  { durationMs = 2500, sampleIntervalMs = 80, blinkThreshold = 0.23 } = {}
 ) {
-    const start = Date.now()
+  const start = Date.now()
   let minEAR = Infinity
   let framesWithFace = 0
-  let bestDetection = null
   let bestScore = -1
   let sampleCount = 0
 
@@ -57,40 +56,46 @@ export async function captureWithLiveness(
     sampleCount += 1
     let detection = null
     try {
+      // No .withFaceDescriptor() here — landmarks are all we need per-frame,
+      // and skipping the recognition-net pass makes each sample much faster.
       detection = await faceapi
         .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks()
-        .withFaceDescriptor()
     } catch (err) {
       console.log('[FinShield DEBUG] detection threw an error on sample', sampleCount, ':', err)
     }
 
-    console.log('[FinShield DEBUG] sample', sampleCount, '-> detection found:', !!detection, detection ? `score=${detection.detection.score.toFixed(3)}` : '')
-console.log('[FinShield DEBUG] minEAR over capture:', minEAR, '| threshold:', blinkThreshold, '| framesWithFace:', framesWithFace, '/', sampleCount)
     if (detection) {
-  framesWithFace += 1
-  const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye())
-  const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye())
-  const avgEAR = (leftEAR + rightEAR) / 2
-  console.log('[FinShield DEBUG] sample', sampleCount, 'avgEAR:', avgEAR.toFixed(3), '(left:', leftEAR.toFixed(3), 'right:', rightEAR.toFixed(3), ')')
-  if (avgEAR < minEAR) minEAR = avgEAR
+      framesWithFace += 1
+      const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye())
+      const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye())
+      const avgEAR = (leftEAR + rightEAR) / 2
+      console.log('[FinShield DEBUG] sample', sampleCount, 'avgEAR:', avgEAR.toFixed(3))
+      if (avgEAR < minEAR) minEAR = avgEAR
+      if (detection.detection.score > bestScore) bestScore = detection.detection.score
+    } else {
+      console.log('[FinShield DEBUG] sample', sampleCount, '-> no face found')
+    }
 
-  if (detection.detection.score > bestScore) {
-    bestScore = detection.detection.score
-    bestDetection = detection
-  }
-}
     await new Promise((resolve) => setTimeout(resolve, sampleIntervalMs))
   }
 
+  console.log('[FinShield DEBUG] minEAR over capture:', minEAR, '| threshold:', blinkThreshold, '| framesWithFace:', framesWithFace, '/', sampleCount)
+
   const blinkDetected = minEAR < blinkThreshold
 
-  if (!bestDetection || framesWithFace < 3) {
-    return { descriptor: null, blinkDetected: false, framesWithFace }
+  if (framesWithFace < 3 || !blinkDetected) {
+    return { descriptor: null, blinkDetected, framesWithFace }
   }
 
+  // Only now run the expensive descriptor extraction — once, on the current frame.
+  const finalDetection = await faceapi
+    .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor()
+
   return {
-    descriptor: Array.from(bestDetection.descriptor),
+    descriptor: finalDetection ? Array.from(finalDetection.descriptor) : null,
     blinkDetected,
     framesWithFace,
   }
