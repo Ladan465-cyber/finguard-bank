@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -7,6 +7,7 @@ from app.models.account import Account
 from app.models.device import Device
 from app.models.user import User
 from app.schemas.transaction_schemas import FaceEnrollRequest
+from app.services import face_service
 
 router = APIRouter(prefix="/api/account", tags=["account"])
 
@@ -45,6 +46,8 @@ def face_status(current_user: User = Depends(get_current_user)):
 
 @router.post("/face-enroll")
 def face_enroll(payload: FaceEnrollRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.face_descriptor:
+        raise HTTPException(403, "Face ID is already enrolled and cannot be changed.")
     current_user.face_descriptor = payload.descriptor
     db.commit()
     return {"success": True, "enrolled": True}

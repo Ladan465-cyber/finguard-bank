@@ -19,6 +19,7 @@ export default function AdminNavbar() {
           <NavLink to="/admin/dashboard" className={({isActive}) => isActive ? 'active' : ''}>Overview</NavLink>
           <NavLink to="/admin/transactions" className={({isActive}) => isActive ? 'active' : ''}>Transactions</NavLink>
           <NavLink to="/admin/alerts" className={({isActive}) => isActive ? 'active' : ''}>Fraud Alerts</NavLink>
+          <NavLink to="/admin/beneficiaries" className={({isActive}) => isActive ? 'active' : ''}>Beneficiaries</NavLink>
           <NavLink to="/admin/audit-logs" className={({isActive}) => isActive ? 'active' : ''}>Audit Logs</NavLink>
         </div>
         <div className="nav-right">

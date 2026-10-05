@@ -56,11 +56,15 @@ export default function Devices() {
           {enrollSuccess && <div className="auth-info" style={{ background: 'var(--low-bg)', color: 'var(--low)' }}>{enrollSuccess}</div>}
           {enrollError && <div className="auth-error">{enrollError}</div>}
 
-          {!enrolling ? (
-            <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => { setEnrolling(true); setEnrollSuccess('') }}>
-              {faceEnrolled ? 'Re-enroll my face' : 'Set up Face ID'}
-            </button>
-          ) : (
+          {faceEnrolled ? (
+  <p className="text-muted" style={{ fontSize: 13, margin: '8px 0 0' }}>
+    Your Face ID is set up and locked. It can't be changed from here.
+  </p>
+) : !enrolling ? (
+  <button className="btn btn-secondary" style={{ width: 'auto' }} onClick={() => { setEnrolling(true); setEnrollSuccess('') }}>
+    Set up Face ID
+  </button>
+) : (
             <div style={{ maxWidth: 360 }}>
               <FaceCapture
                 buttonLabel="Save this as my Face ID"

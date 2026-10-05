@@ -6,29 +6,35 @@ import RiskBadge from '../components/RiskBadge'
 
 const SCENARIOS = [
   {
-    key: 'A', label: 'Scenario A · Normal transfer', expect: 'LOW',
+    key: '1', label: 'Scenario 1 · Normal transfer', expect: 'SAFE',
     recipient_account_number: '1011112222', recipient_name: 'Chinedu Okafor', amount: '20000',
     resetDevice: false, city: 'Lagos', simulated_hour: '',
-    note: 'Known recipient, known device, normal amount & city.',
+    note: 'Known recipient, known device, normal amount, normal city -> approved instantly.',
   },
   {
-    key: 'B', label: 'Scenario B · New recipient', expect: 'MEDIUM',
-    recipient_account_number: '1033334444', recipient_name: 'Tunde Bakare', amount: '90000',
+    key: '2', label: 'Scenario 2 · New beneficiary, large amount', expect: 'VERIFY',
+    recipient_account_number: '1033334444', recipient_name: 'Tunde Bakare', amount: '150000',
     resetDevice: false, city: 'Lagos', simulated_hour: '',
-    note: 'New recipient + amount moderately above average → OTP required.',
+    note: 'Known device, but a large amount to a brand-new recipient -> OTP required.',
   },
   {
-    key: 'C', label: 'Scenario C · New device + location', expect: 'HIGH',
-    recipient_account_number: '1022223333', recipient_name: 'Amaka Eze', amount: '70000',
+    key: '3', label: 'Scenario 3 · Ponzi-tagged recipient', expect: 'HIGH_RISK',
+    recipient_account_number: '1099998888', recipient_name: 'Unknown Wallet Services', amount: '20000',
+    resetDevice: false, city: 'Lagos', simulated_hour: '',
+    note: 'Recipient is on the fraud watchlist -> warning modal appears before submit.',
+  },
+  {
+    key: '4', label: 'Scenario 4 · New device + risky recipient', expect: 'HIGH_RISK',
+    recipient_account_number: '1099998888', recipient_name: 'Unknown Wallet Services', amount: '40000',
     resetDevice: true, city: 'Kano', simulated_hour: '',
-    note: 'Known recipient, but new device + unusual city + raised amount → identity verification.',
+    note: 'New device, unfamiliar city, AND a watchlisted recipient -> enhanced verification.',
   },
   {
-    key: 'D', label: 'Scenario D · Multiple severe anomalies', expect: 'CRITICAL',
-    recipient_account_number: '1099998888', recipient_name: 'Unknown Wallet Services', amount: '600000',
-    resetDevice: true, city: 'Kano', simulated_hour: '3',
-    note: 'New recipient, new device, unusual city, 3AM, extreme amount → blocked + fraud alert.',
-  },
+  key: '5', label: 'Scenario 5 · Multiple severe indicators', expect: 'CRITICAL',
+  recipient_account_number: '1099998888', recipient_name: 'Unknown Wallet Services', amount: '600000',
+  resetDevice: true, city: 'Kano', simulated_hour: '3',
+  note: 'Watchlisted recipient + new device + new city + extreme amount + 3AM -> blocked + fraud alert.',
+},
 ]
 
 export default function Transfer() {
@@ -39,10 +45,11 @@ export default function Transfer() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
+  const [warning, setWarning] = useState(null)
   const navigate = useNavigate()
 
   const applyScenario = (s) => {
-    setError(''); setResult(null)
+setError(''); setResult(null); setWarning(null)
     if (s.resetDevice) resetDeviceFingerprint()
     setForm({
       recipient_account_number: s.recipient_account_number,
@@ -56,43 +63,73 @@ export default function Transfer() {
 
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
-  const submit = async (e) => {
-    e.preventDefault()
-    setError(''); setResult(null); setLoading(true)
-    try {
-      const payload = {
-        recipient_account_number: form.recipient_account_number,
-        recipient_name: form.recipient_name || undefined,
-        amount: parseFloat(form.amount),
-        narration: form.narration || undefined,
-        device_fingerprint: getDeviceFingerprint(),
-        browser: detectBrowser(),
-        operating_system: detectOS(),
-        city: form.city,
-        country: 'Nigeria',
-        simulated_hour: form.simulated_hour === '' ? undefined : parseInt(form.simulated_hour, 10),
-      }
-      const res = await api.post('/api/transactions', payload)
-      setResult(res.data)
+const buildPayload = () => ({
+      recipient_account_number: form.recipient_account_number,
+    recipient_name: form.recipient_name || undefined,
+    amount: parseFloat(form.amount),
+    narration: form.narration || undefined,
+    device_fingerprint: getDeviceFingerprint(),
+    browser: detectBrowser(),
+    operating_system: detectOS(),
+    city: form.city,
+    country: 'Nigeria',
+    simulated_hour: form.simulated_hour === '' ? undefined : parseInt(form.simulated_hour, 10),
+    acknowledged_beneficiary_warning: false,
+  })
 
-      if (res.data.requires_otp) {
-        setTimeout(() => navigate('/verify/otp', { state: { ...res.data } }), 900)
-      } else if (res.data.requires_verification) {
-        setTimeout(() => navigate('/verify/facial', { state: { ...res.data } }), 900)
-      }
-    } catch (err) {
-      setError(apiErrorMessage(err, 'Transfer could not be processed.'))
-    } finally {
-      setLoading(false)
+  const doSubmit = async () => {
+  setLoading(true)
+  try {
+    const res = await api.post('/api/transactions', buildPayload())
+    setResult(res.data)
+
+    if (res.data.requires_otp) {
+      setTimeout(() => navigate('/verify/otp', { state: { ...res.data } }), 900)
+    } else if (res.data.requires_verification) {
+      setTimeout(() => navigate('/verify/facial', { state: { ...res.data } }), 900)
+    } else if (res.data.status === 'completed') {
+      setTimeout(() => navigate(`/receipt/${res.data.transaction_id}`), 900)
     }
+  } catch (err) {
+    setError(apiErrorMessage(err, 'Transfer could not be processed.'))
+  } finally {
+    setLoading(false)
   }
+}
+
+const submit = async (e) => {
+  e.preventDefault()
+  setError(''); setResult(null)
+  setLoading(true)
+  try {
+    const { data } = await api.post('/api/transactions/preview', buildPayload())
+    if (data.needs_warning) {
+      setWarning(data)        // popup shows; nothing has been sent yet
+      setLoading(false)
+      return
+    }
+  } catch (err) {
+    setError(apiErrorMessage(err, 'Could not check this transfer.'))
+    setLoading(false)
+    return
+  }
+  setLoading(false)
+  doSubmit()
+}
+
+const cancelWarning = () => setWarning(null)
+
+const proceedPastWarning = () => {
+  setWarning(null)
+  doSubmit()
+}
 
   return (
     <div className="page">
       <div className="container" style={{ maxWidth: 640 }}>
         <div className="page-header">
           <h1>Send money</h1>
-          <p>Every transfer is screened by FinShield before it completes.</p>
+          <p>Every transfer is screened by FinShield's multi-layer fraud engine before it completes.</p>
         </div>
 
         <div className="scenario-panel">
@@ -111,7 +148,7 @@ export default function Transfer() {
           {error && <div className="auth-error">{error}</div>}
 
           {result && (
-            <div className={result.status === 'blocked' ? 'auth-error' : result.status === 'completed' ? 'auth-info' : 'auth-info'}
+            <div className={result.status === 'blocked' ? 'auth-error' : 'auth-info'}
                  style={result.status === 'completed' ? { background: 'var(--low-bg)', color: 'var(--low)', borderColor: 'transparent' } : {}}>
               <strong>{result.customer_message}</strong>
               {result.reference && <div className="mono text-muted" style={{ marginTop: 6, fontSize: 12 }}>Ref: {result.reference}</div>}
@@ -123,7 +160,11 @@ export default function Transfer() {
           <form onSubmit={submit}>
             <div className="field">
               <label>Recipient account number</label>
-              <input value={form.recipient_account_number} onChange={update('recipient_account_number')} maxLength={10} required />
+              <input
+                value={form.recipient_account_number}
+                onChange={update('recipient_account_number')}
+                maxLength={10} required
+              />
             </div>
             <div className="field">
               <label>Recipient name (optional)</label>
@@ -153,6 +194,36 @@ export default function Transfer() {
           </form>
         </div>
       </div>
+
+      {warning && (
+  <div className="modal-backdrop" onClick={cancelWarning}>
+    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, maxHeight: '85vh', overflow: 'auto' }}>
+      <h2 style={{ fontSize: 17, margin: '0 0 8px' }}>⚠️ {warning.headline}</h2>
+      <p className="text-muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+        Risk level: <RiskBadge level={warning.risk_level} />
+      </p>
+
+      <p style={{ fontSize: 13, fontWeight: 600, margin: '10px 0 4px' }}>What we noticed:</p>
+      <ul style={{ fontSize: 13, paddingLeft: 18, margin: 0 }}>
+        {warning.scenario.map((s, i) => <li key={i}>{s}</li>)}
+      </ul>
+
+      {warning.consequences.length > 0 && (
+        <>
+          <p style={{ fontSize: 13, fontWeight: 600, margin: '12px 0 4px' }}>If you proceed:</p>
+          <ul style={{ fontSize: 13, paddingLeft: 18, margin: 0 }}>
+            {warning.consequences.map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        </>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <button className="btn btn-secondary" onClick={cancelWarning}>Cancel</button>
+        <button className="btn btn-primary" onClick={proceedPastWarning}>I understand, proceed</button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   )
 }

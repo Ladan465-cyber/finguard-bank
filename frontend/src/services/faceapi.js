@@ -9,94 +9,45 @@ let loadingPromise = null
 const MODEL_URL = '/models'
 
 export function loadFaceModels() {
-  if (modelsLoaded) return Promise.resolve()
-  if (loadingPromise) return loadingPromise
+    if (modelsLoaded) return Promise.resolve()
+    if (loadingPromise) return loadingPromise
 
-  loadingPromise = Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-  ]).then(() => { modelsLoaded = true })
+    loadingPromise = Promise.all([
+        faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+        faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+        faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+    ]).then(() => { modelsLoaded = true })
 
-  return loadingPromise
-}
-
-// Eye Aspect Ratio: a standard, well-established liveness signal. It's the
-// ratio of an eye's height to its width, computed from 6 landmark points
-// around the eye. A real eye closing during a blink makes this ratio drop
-// sharply for a few frames; a static photo's "eyes" never change ratio at
-// all, which is exactly what lets us tell the two apart.
-function eyeAspectRatio(eyePoints) {
-  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
-  const vertical1 = dist(eyePoints[1], eyePoints[5])
-  const vertical2 = dist(eyePoints[2], eyePoints[4])
-  const horizontal = dist(eyePoints[0], eyePoints[3])
-  return (vertical1 + vertical2) / (2 * horizontal)
+    return loadingPromise
 }
 
 /**
- * Runs face detection repeatedly over a short window (default 2.5s),
- * watching for a genuine blink (a dip in eye-aspect-ratio) as a liveness
- * check, and keeps the highest-confidence frame's descriptor to use for
- * matching. Returns null fields if no face / no blink was found.
+ * Runs real face detection + landmark extraction + descriptor computation
+ * on the given <video> element. Returns a 128-number array (the face's
+ * numeric "fingerprint") or null if no face was confidently detected.
+ * This is a single-frame capture -- matching against the enrolled
+ * descriptor (done server-side) is what actually verifies identity.
  */
-export async function captureWithLiveness(
-  videoEl,
-  { durationMs = 2500, sampleIntervalMs = 80, blinkThreshold = 0.23 } = {}
-) {
-  const start = Date.now()
-  let minEAR = Infinity
-  let framesWithFace = 0
-  let bestScore = -1
-  let sampleCount = 0
-
-  console.log('[FinShield DEBUG] video element size:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'readyState:', videoEl.readyState)
-
-  while (Date.now() - start < durationMs) {
-    sampleCount += 1
-    let detection = null
-    try {
-      // No .withFaceDescriptor() here — landmarks are all we need per-frame,
-      // and skipping the recognition-net pass makes each sample much faster.
-      detection = await faceapi
+export async function captureFaceDescriptor(videoEl) {
+    const detection = await faceapi
         .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
         .withFaceLandmarks()
-    } catch (err) {
-      console.log('[FinShield DEBUG] detection threw an error on sample', sampleCount, ':', err)
+        .withFaceDescriptor()
+
+    if (!detection) return null
+    return Array.from(detection.descriptor)
+}
+export async function captureAveragedDescriptor(videoEl, samples = 5, intervalMs = 300) {
+    const descs = []
+    for (let i = 0; i < samples; i++) {
+        const d = await captureFaceDescriptor(videoEl)
+        if (!d) return null // face lost mid-capture
+        descs.push(d)
+        await new Promise(r => setTimeout(r, intervalMs))
     }
-
-    if (detection) {
-      framesWithFace += 1
-      const leftEAR = eyeAspectRatio(detection.landmarks.getLeftEye())
-      const rightEAR = eyeAspectRatio(detection.landmarks.getRightEye())
-      const avgEAR = (leftEAR + rightEAR) / 2
-      console.log('[FinShield DEBUG] sample', sampleCount, 'avgEAR:', avgEAR.toFixed(3))
-      if (avgEAR < minEAR) minEAR = avgEAR
-      if (detection.detection.score > bestScore) bestScore = detection.detection.score
-    } else {
-      console.log('[FinShield DEBUG] sample', sampleCount, '-> no face found')
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, sampleIntervalMs))
-  }
-
-  console.log('[FinShield DEBUG] minEAR over capture:', minEAR, '| threshold:', blinkThreshold, '| framesWithFace:', framesWithFace, '/', sampleCount)
-
-  const blinkDetected = minEAR < blinkThreshold
-
-  if (framesWithFace < 3 || !blinkDetected) {
-    return { descriptor: null, blinkDetected, framesWithFace }
-  }
-
-  // Only now run the expensive descriptor extraction — once, on the current frame.
-  const finalDetection = await faceapi
-    .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
-    .withFaceLandmarks()
-    .withFaceDescriptor()
-
-  return {
-    descriptor: finalDetection ? Array.from(finalDetection.descriptor) : null,
-    blinkDetected,
-    framesWithFace,
-  }
+    const mean = new Array(128).fill(0)
+    descs.forEach(d => d.forEach((v, i) => { mean[i] += v / descs.length }))
+    const dist = (a, b) => Math.sqrt(a.reduce((s, v, i) => s + (v - b[i]) ** 2, 0))
+    if (descs.some(d => dist(d, mean) > 0.3)) return null // frames disagree
+    return mean
 }

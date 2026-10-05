@@ -12,6 +12,8 @@ from app.models.transaction import Transaction, TransactionStatus, RiskLevel
 from app.models.fraud import FraudEvent, FraudEventStatus
 from app.models.audit import AuditLog
 from app.models.device import Device
+from app.models.beneficiary import BeneficiaryRiskProfile, BeneficiaryRiskCategory
+from app.schemas.transaction_schemas import BeneficiaryUpsertRequest
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -23,7 +25,7 @@ def dashboard_stats(current_admin: AdminUser = Depends(get_current_admin), db: S
     blocked = db.query(func.count(Transaction.id)).filter(Transaction.status == TransactionStatus.blocked).scalar() or 0
     awaiting_otp = db.query(func.count(Transaction.id)).filter(Transaction.status == TransactionStatus.awaiting_otp).scalar() or 0
     awaiting_verification = db.query(func.count(Transaction.id)).filter(Transaction.status == TransactionStatus.awaiting_verification).scalar() or 0
-    high_risk = db.query(func.count(Transaction.id)).filter(Transaction.risk_level == RiskLevel.high).scalar() or 0
+    high_risk = db.query(func.count(Transaction.id)).filter(Transaction.risk_level == RiskLevel.high_risk).scalar() or 0
     critical_risk = db.query(func.count(Transaction.id)).filter(Transaction.risk_level == RiskLevel.critical).scalar() or 0
     open_alerts = db.query(func.count(FraudEvent.id)).filter(FraudEvent.status == FraudEventStatus.open).scalar() or 0
 
@@ -142,7 +144,7 @@ def fraud_alerts(
             "user_name": txn.sender.full_name if txn and txn.sender else None,
             "amount": str(txn.amount) if txn else None,
             "risk_level": e.risk_level,
-            "risk_score": str(e.risk_score),
+            "risk_score": str(e.risk_score) if e.risk_score is not None else None,
             "risk_factors": e.risk_factors,
             "status": e.status.value,
             "created_at": e.created_at,
@@ -200,3 +202,63 @@ def list_users(current_admin: AdminUser = Depends(get_current_admin), db: Sessio
         }
         for u in users
     ]
+
+
+# ---------------------------------------------------------------------
+# Beneficiary Watchlist -- fraud intelligence dashboard management
+# ---------------------------------------------------------------------
+@router.get("/beneficiaries")
+def list_beneficiaries(current_admin: AdminUser = Depends(get_current_admin), db: Session = Depends(get_db)):
+    rows = db.query(BeneficiaryRiskProfile).order_by(BeneficiaryRiskProfile.updated_at.desc()).all()
+    return [
+        {
+            "id": b.id,
+            "account_number": b.account_number,
+            "risk_category": b.risk_category.value,
+            "tags": b.tags or [],
+            "reason": b.reason,
+            "fraud_report_count": b.fraud_report_count,
+            "complaint_count": b.complaint_count,
+            "created_at": b.created_at,
+            "updated_at": b.updated_at,
+        }
+        for b in rows
+    ]
+
+
+@router.post("/beneficiaries")
+def upsert_beneficiary(
+    payload: BeneficiaryUpsertRequest,
+    current_admin: AdminUser = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    if payload.risk_category not in (c.value for c in BeneficiaryRiskCategory):
+        raise HTTPException(400, "risk_category must be TRUSTED, WATCHLISTED, or HIGH_RISK")
+
+    profile = (
+        db.query(BeneficiaryRiskProfile)
+        .filter(BeneficiaryRiskProfile.account_number == payload.account_number)
+        .first()
+    )
+    if not profile:
+        profile = BeneficiaryRiskProfile(account_number=payload.account_number)
+        db.add(profile)
+
+    profile.risk_category = BeneficiaryRiskCategory(payload.risk_category)
+    profile.reason = payload.reason
+    profile.tags = payload.tags
+    profile.fraud_report_count = payload.fraud_report_count
+    profile.complaint_count = payload.complaint_count
+    profile.added_by_admin_id = current_admin.id
+    db.commit()
+    return {"success": True}
+
+
+@router.delete("/beneficiaries/{beneficiary_id}")
+def delete_beneficiary(beneficiary_id: str, current_admin: AdminUser = Depends(get_current_admin), db: Session = Depends(get_db)):
+    profile = db.query(BeneficiaryRiskProfile).filter(BeneficiaryRiskProfile.id == beneficiary_id).first()
+    if not profile:
+        raise HTTPException(404, "Beneficiary profile not found")
+    db.delete(profile)
+    db.commit()
+    return {"success": True}

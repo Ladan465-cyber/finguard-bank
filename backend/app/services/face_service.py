@@ -13,7 +13,7 @@ person".
 import math
 from typing import List, Optional
 
-MATCH_THRESHOLD = 0.5
+MATCH_THRESHOLD = 0.35
 
 
 def euclidean_distance(a: List[float], b: List[float]) -> float:

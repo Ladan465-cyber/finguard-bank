@@ -1,15 +1,19 @@
 """
-Seeds the FinGuard database with realistic Nigerian fintech demo data.
+Seeds the FinGuard database with realistic Nigerian fintech demo data for
+FinShield v2 (the multi-layer, categorical fraud engine).
 
 Run with:  python -m app.seed   (from the backend/ directory, venv active)
 
 Creates:
-- Fraud rule weights (configurable, not hardcoded in the engine)
 - 1 admin user
-- 3 demo customers with real transaction HISTORY so their behaviour
-  profiles are genuinely learned, not hand-set
-- A pre-existing blocked/critical transaction + fraud alert so the admin
-  dashboard has something to show immediately
+- Primary demo customer (Ngozi Chukwu) with 18 days of real transaction
+  HISTORY so her behaviour profile is genuinely learned, not hand-set
+- Secondary demo accounts used as recipients in the demo scenarios
+- A beneficiary watchlist entry (a HIGH_RISK, Ponzi-tagged account) so the
+  Beneficiary Risk layer and the pre-submit warning modal have something
+  real to react to
+- A pre-existing blocked/CRITICAL transaction + fraud alert so the admin
+  dashboard isn't empty the moment a judge opens it
 """
 import random
 from datetime import datetime, timedelta
@@ -21,16 +25,15 @@ from app.models.user import User, AdminUser, UserStatus, AdminRole
 from app.models.account import Account
 from app.models.device import Device
 from app.models.transaction import Transaction, TransactionStatus, RiskLevel, TransactionType
-from app.models.fraud import FraudRule, FraudEvent, FraudEventStatus
+from app.models.fraud import FraudEvent, FraudEventStatus
+from app.models.beneficiary import BeneficiaryRiskProfile, BeneficiaryRiskCategory
 from app.auth.security import hash_password
-from app.services.fraud_engine import DEFAULT_RULE_WEIGHTS
 from app.services.behavior_service import refresh_behavior_profile
 
 Base.metadata.create_all(bind=engine)
 db = SessionLocal()
 
 DEMO_DEVICE_LAGOS = "fp_demo_lagos_chrome_win_001"
-LAGOS = {"city": "Lagos", "country": "Nigeria"}
 
 
 def reset_transactional_data():
@@ -39,17 +42,10 @@ def reset_transactional_data():
     db.query(Transaction).delete()
     db.query(Device).delete()
     db.query(models.UserBehaviorProfile).delete()
+    db.query(BeneficiaryRiskProfile).delete()
     db.query(Account).delete()
     db.query(User).delete()
     db.query(AdminUser).delete()
-    db.query(FraudRule).delete()
-    db.commit()
-
-
-def seed_fraud_rules():
-    for key, weight in DEFAULT_RULE_WEIGHTS.items():
-        db.add(FraudRule(rule_key=key, description=key.replace("_", " ").capitalize(),
-                          weight=Decimal(str(weight)), is_active=True, version="1.0.0"))
     db.commit()
 
 
@@ -99,10 +95,10 @@ def add_completed_transaction(sender: User, sender_acc: Account, recipient_acc: 
         ip_address="105.112.10.24",
         city=city,
         country=country,
-        risk_level=RiskLevel.low,
-        risk_score=Decimal("5.0"),
-        risk_factors=["No anomalies detected — transaction matches user's established behaviour"],
-        fraud_rule_version="1.0.0",
+        risk_level=RiskLevel.safe,
+        risk_score=None,
+        risk_factors=["No anomalies detected -- transaction matches user's established behaviour"],
+        fraud_rule_version="2.0.0",
         status=TransactionStatus.completed,
         created_at=created,
         completed_at=created,
@@ -149,7 +145,7 @@ def seed_primary_demo_user_with_history():
     # Dedicated RNG streams (fixed seeds) so the resulting average/typical
     # amounts are exactly reproducible every time the seed script runs --
     # this is what lets the hackathon demo scenario buttons reliably land
-    # on their intended risk tier (see documentation/DEMO_SCENARIOS.md).
+    # on their intended tier (see documentation/DEMO_SCENARIOS.md).
     rng_amount = random.Random(42)
     rng_recipient = random.Random(7)
     rng_hour = random.Random(13)
@@ -171,11 +167,33 @@ def seed_primary_demo_user_with_history():
 
 def seed_secondary_users():
     """A couple of extra accounts so recipients can be typed in during the
-    HIGH / CRITICAL scenarios (new, unrecognised recipients for Ngozi)."""
+    VERIFY / HIGH_RISK / CRITICAL demo scenarios."""
     make_user("Tunde Bakare", "tunde.bakare@example.com", "+2348044445555",
               "Port Harcourt", 60_000, "1033334444")
     make_user("Unknown Wallet Services", "wallet@unknownexchange.example", "+2348099998888",
               "Lagos", 0, "1099998888")
+
+
+def seed_beneficiary_watchlist():
+    """
+    Beneficiary Risk Analysis needs at least one account with real fraud
+    intelligence attached to it. This is what powers the pre-submit warning
+    modal (Scenario 3) and the HIGH_RISK / CRITICAL escalation rules
+    (Scenarios 3-5).
+    """
+    db.add(BeneficiaryRiskProfile(
+        account_number="1099998888",
+        risk_category=BeneficiaryRiskCategory.high_risk,
+        tags=["ponzi_scheme", "multiple_fraud_reports", "mule_account"],
+        reason=(
+            "Multiple customer complaints and confirmed links to a "
+            "Ponzi-style investment scheme. Reported by 6 separate FinGuard "
+            "customers in the last 30 days."
+        ),
+        fraud_report_count=6,
+        complaint_count=11,
+    ))
+    db.commit()
 
 
 def seed_preexisting_fraud_alert(ngozi, ngozi_acc):
@@ -199,16 +217,15 @@ def seed_preexisting_fraud_alert(ngozi, ngozi_acc):
         city="Kano",
         country="Nigeria",
         risk_level=RiskLevel.critical,
-        risk_score=Decimal("91.0"),
+        risk_score=None,
         risk_factors=[
-            "Transaction amount is extremely above the user's normal range (18.5x average)",
-            "New recipient detected (not in user's known recipient list)",
-            "Transaction initiated from an unrecognised device",
-            "Transaction originates from a location not previously used by this user",
-            "Transaction occurred at an unusual time (03:00)",
-            "Multiple independent risk indicators triggered simultaneously",
+            "Recipient account is on the fraud watchlist as HIGH_RISK: Multiple customer complaints and confirmed links to a Ponzi-style investment scheme.",
+            "Multiple additional risk indicators were present simultaneously",
+            "Transaction from an unrecognised device in an unfamiliar location",
+            "Transaction amount is far above this user's normal range",
+            "Transaction occurred at an unusual time for this user",
         ],
-        fraud_rule_version="1.0.0",
+        fraud_rule_version="2.0.0",
         status=TransactionStatus.blocked,
         investigation_status="open",
         created_at=created,
@@ -219,8 +236,8 @@ def seed_preexisting_fraud_alert(ngozi, ngozi_acc):
 
     db.add(FraudEvent(
         transaction_id=txn.id, user_id=ngozi.id,
-        risk_level="CRITICAL", risk_score=Decimal("91.0"),
-        risk_factors=txn.risk_factors, fraud_rule_version="1.0.0",
+        risk_level="CRITICAL", risk_score=None,
+        risk_factors=txn.risk_factors, fraud_rule_version="2.0.0",
         status=FraudEventStatus.open, created_at=created,
     ))
     db.commit()
@@ -229,23 +246,25 @@ def seed_preexisting_fraud_alert(ngozi, ngozi_acc):
 def main():
     print("Resetting demo data...")
     reset_transactional_data()
-    print("Seeding fraud rules...")
-    seed_fraud_rules()
     print("Seeding admin user...")
     seed_admin()
     print("Seeding primary demo user (Ngozi Chukwu) with 18 days of history...")
     ngozi, ngozi_acc, landlord_acc, sister_acc = seed_primary_demo_user_with_history()
     print("Seeding secondary demo users (for new-recipient scenarios)...")
     seed_secondary_users()
+    print("Seeding beneficiary watchlist (HIGH_RISK Ponzi-scheme account)...")
+    seed_beneficiary_watchlist()
     print("Seeding a pre-existing CRITICAL fraud alert for the admin dashboard...")
     seed_preexisting_fraud_alert(ngozi, ngozi_acc)
 
     print("\nDone! Demo credentials:")
     print("  Customer login : ngozi.chukwu@example.com / Demo@123")
     print("  Admin login    : admin@finguard.ng / Admin@123")
-    print(f"  Ngozi's known recipient (landlord) account number : {landlord_acc.account_number}")
-    print(f"  Ngozi's known recipient (sister) account number   : {sister_acc.account_number}")
-    print("  Unknown recipient account number for demos          : 1033334444 (Tunde Bakare)")
+    print("\nAccount numbers for the 5 official demo scenarios:")
+    print(f"  Known recipient (landlord)      : {landlord_acc.account_number}  (Chinedu Okafor)")
+    print(f"  Known recipient (sister)        : {sister_acc.account_number}  (Amaka Eze)")
+    print("  Unknown/new recipient            : 1033334444  (Tunde Bakare)")
+    print("  HIGH_RISK / watchlisted recipient : 1099998888  (Unknown Wallet Services -- Ponzi tag)")
 
 
 if __name__ == "__main__":

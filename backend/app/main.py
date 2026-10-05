@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.database import Base, engine
 from app import models  # noqa: F401 -- ensures models are registered before create_all
-from app.routers import auth_router, account_router, transaction_router, admin_router
+from app.routers import auth_router, account_router, transaction_router, admin_router, beneficiary_router
 
 app = FastAPI(
     title="FinGuard Bank API",
@@ -28,6 +28,7 @@ app.include_router(auth_router.router)
 app.include_router(account_router.router)
 app.include_router(transaction_router.router)
 app.include_router(admin_router.router)
+app.include_router(beneficiary_router.router)
 
 
 @app.on_event("startup")

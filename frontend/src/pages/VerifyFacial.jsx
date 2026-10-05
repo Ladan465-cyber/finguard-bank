@@ -32,7 +32,7 @@ export default function VerifyFacial() {
       })
       if (res.data.success) {
         setSuccess(res.data.message)
-        setTimeout(() => navigate('/history'), 1200)
+        setTimeout(() => navigate(`/receipt/${state.transaction_id}`), 1200)
       } else {
         setError(res.data.message)
       }

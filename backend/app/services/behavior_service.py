@@ -79,3 +79,14 @@ def get_txns_last_24h(db: Session, user_id: str) -> int:
         .filter(Transaction.sender_id == user_id, Transaction.created_at >= cutoff)
         .count()
     )
+
+
+def get_txns_in_velocity_window(db: Session, user_id: str, minutes: int) -> int:
+    """Counts transactions in a short recent window, used for the
+    Transaction Context layer's HIGH_VELOCITY flag (many rapid transfers)."""
+    cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+    return (
+        db.query(Transaction)
+        .filter(Transaction.sender_id == user_id, Transaction.created_at >= cutoff)
+        .count()
+    )

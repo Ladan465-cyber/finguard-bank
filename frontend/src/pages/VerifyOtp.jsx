@@ -10,6 +10,7 @@ export default function VerifyOtp() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showOtpModal, setShowOtpModal] = useState(!!state.demo_otp_code)
 
   if (!state.transaction_id) {
     return (
@@ -31,17 +32,29 @@ export default function VerifyOtp() {
         transaction_id: state.transaction_id,
         otp_code: code,
       })
-      if (res.data.success) {
+
+      if (res.data.success && res.data.requires_further_verification) {
         setSuccess(res.data.message)
-        setTimeout(() => navigate('/history'), 1200)
+        setTimeout(() => navigate('/verify/facial', {
+          state: { transaction_id: res.data.transaction_id, reference: res.data.reference },
+        }), 1000)
+      } else if (res.data.success) {
+        setSuccess(res.data.message)
+        setTimeout(() => navigate(`/receipt/${state.transaction_id}`), 1200)
       } else {
-        setError(res.data.message)
-      }
+  setError(res.data.message)
+  setCode('')
+}
     } catch (err) {
       setError(apiErrorMessage(err, 'Verification failed.'))
     } finally {
       setLoading(false)
     }
+  }
+
+  const autofillDemoCode = () => {
+    setCode(state.demo_otp_code)
+    setShowOtpModal(false)
   }
 
   return (
@@ -56,11 +69,6 @@ export default function VerifyOtp() {
           </p>
           <p className="mono text-muted" style={{ fontSize: 12 }}>Ref: {state.reference}</p>
 
-          {state.demo_otp_code && (
-            <div className="auth-info">
-              <b>Demo mode:</b> no real SMS is sent in this hackathon build. Your OTP is <b className="mono">{state.demo_otp_code}</b>.
-            </div>
-          )}
           {error && <div className="auth-error">{error}</div>}
           {success && <div className="auth-info" style={{ background: 'var(--low-bg)', color: 'var(--low)' }}>{success}</div>}
 
@@ -78,8 +86,47 @@ export default function VerifyOtp() {
               {loading ? 'Verifying…' : 'Confirm transaction'}
             </button>
           </form>
+
+          {state.demo_otp_code && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ marginTop: 10, fontSize: 12.5 }}
+              onClick={() => setShowOtpModal(true)}
+            >
+              Show demo OTP code again
+            </button>
+          )}
         </div>
       </div>
+
+      {showOtpModal && state.demo_otp_code && (
+        <div className="modal-backdrop" onClick={() => setShowOtpModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380, textAlign: 'center' }}>
+            <div className="verify-icon medium" style={{ margin: '0 auto 16px' }}>📱</div>
+            <h2 style={{ fontSize: 17, margin: '0 0 6px' }}>Demo mode: SMS simulation</h2>
+            <p className="text-secondary" style={{ fontSize: 13.5, lineHeight: 1.6, marginBottom: 16 }}>
+              No real SMS is sent in this hackathon build. Here's the one-time
+              code that would normally arrive by text:
+            </p>
+            <div
+              className="mono"
+              style={{
+                fontSize: 32, fontWeight: 700, letterSpacing: 8,
+                background: 'var(--bg-elevated)', border: '1px solid var(--border-light)',
+                borderRadius: 'var(--radius-sm)', padding: '14px 10px', marginBottom: 18,
+                color: 'var(--accent)',
+              }}
+            >
+              {state.demo_otp_code}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-secondary" onClick={() => setShowOtpModal(false)}>Close</button>
+              <button className="btn btn-primary" onClick={autofillDemoCode}>Use this code</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

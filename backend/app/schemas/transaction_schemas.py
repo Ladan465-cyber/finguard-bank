@@ -24,6 +24,11 @@ class TransactionCreate(BaseModel):
     # a judge can trigger a 3AM scenario during a daytime demo.
     simulated_hour: Optional[int] = Field(default=None, ge=0, le=23)
 
+    # True if the customer saw the beneficiary risk warning modal and chose
+    # "Proceed Anyway" -- fed into the Transaction Context layer as its own
+    # signal (proceeding past a warning is itself mildly suspicious).
+    acknowledged_beneficiary_warning: bool = False
+
 
 class TransactionResult(BaseModel):
     transaction_id: str
@@ -63,3 +68,28 @@ class FacialVerifyRequest(BaseModel):
 
 class FaceEnrollRequest(BaseModel):
     descriptor: List[float] = Field(min_length=128, max_length=128)
+
+
+class BeneficiaryCheckResult(BaseModel):
+    account_number: str
+    risk_category: str          # TRUSTED / UNKNOWN / WATCHLISTED / HIGH_RISK
+    warning_message: Optional[str] = None
+    tags: List[str] = []
+
+
+class BeneficiaryUpsertRequest(BaseModel):
+    account_number: str = Field(min_length=10, max_length=10)
+    risk_category: str          # TRUSTED / WATCHLISTED / HIGH_RISK
+    reason: Optional[str] = None
+    tags: List[str] = []
+    fraud_report_count: int = 0
+    complaint_count: int = 0
+class TransactionResult(BaseModel):
+    transaction_id: str
+    reference: str
+    status: str
+    risk_level: Optional[str] = None
+    customer_message: str
+    requires_otp: bool = False
+    requires_verification: bool = False
+    demo_otp_code: Optional[str] = None

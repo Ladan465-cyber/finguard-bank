@@ -20,7 +20,9 @@ import AdminLogin from './pages/admin/AdminLogin'
 import AdminDashboard from './pages/admin/AdminDashboard'
 import AdminTransactions from './pages/admin/AdminTransactions'
 import AdminFraudAlerts from './pages/admin/AdminFraudAlerts'
+import AdminBeneficiaries from './pages/admin/AdminBeneficiaries'
 import AdminAuditLogs from './pages/admin/AdminAuditLogs'
+import TransactionReceipt from './pages/TransactionReceipt'
 
 function CustomerLayout({ children }) {
   return (
@@ -59,6 +61,9 @@ export default function App() {
             <Route path="/history" element={
               <ProtectedRoute><CustomerLayout><History /></CustomerLayout></ProtectedRoute>
             } />
+            <Route path="/receipt/:id" element={
+              <ProtectedRoute><CustomerLayout><TransactionReceipt /></CustomerLayout></ProtectedRoute>
+            } />
             <Route path="/devices" element={
               <ProtectedRoute><CustomerLayout><Devices /></CustomerLayout></ProtectedRoute>
             } />
@@ -78,6 +83,9 @@ export default function App() {
             } />
             <Route path="/admin/alerts" element={
               <AdminProtectedRoute><AdminLayout><AdminFraudAlerts /></AdminLayout></AdminProtectedRoute>
+            } />
+            <Route path="/admin/beneficiaries" element={
+              <AdminProtectedRoute><AdminLayout><AdminBeneficiaries /></AdminLayout></AdminProtectedRoute>
             } />
             <Route path="/admin/audit-logs" element={
               <AdminProtectedRoute><AdminLayout><AdminAuditLogs /></AdminLayout></AdminProtectedRoute>

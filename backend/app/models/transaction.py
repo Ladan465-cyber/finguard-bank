@@ -20,9 +20,10 @@ class TransactionType(str, enum.Enum):
 
 
 class RiskLevel(str, enum.Enum):
-    low = "LOW"
-    medium = "MEDIUM"
-    high = "HIGH"
+    safe = "SAFE"
+    caution = "CAUTION"
+    verify = "VERIFY"
+    high_risk = "HIGH_RISK"
     critical = "CRITICAL"
 
 
@@ -71,7 +72,7 @@ class Transaction(Base):
     country = Column(String(100), nullable=True)
 
     # Fraud engine output
-    risk_level = Column(Enum(RiskLevel), nullable=True)
+    risk_level = Column(Enum(RiskLevel, values_callable=lambda obj: [e.value for e in obj]), nullable=True)
     risk_score = Column(Numeric(5, 2), nullable=True)  # 0-100
     risk_factors = Column(JSON, nullable=True)          # list[str]
     fraud_rule_version = Column(String(20), nullable=True)

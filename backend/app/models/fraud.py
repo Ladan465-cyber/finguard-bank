@@ -31,7 +31,7 @@ class FraudEvent(Base):
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
 
     risk_level = Column(String(20), nullable=False)
-    risk_score = Column(Numeric(5, 2), nullable=False)
+    risk_score = Column(Numeric(5, 2), nullable=True)  # not used by the v2 categorical engine; kept for schema compatibility
     risk_factors = Column(JSON, nullable=False)
     fraud_rule_version = Column(String(20), nullable=True)
 

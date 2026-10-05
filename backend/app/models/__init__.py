@@ -5,6 +5,7 @@ from app.models.transaction import Transaction
 from app.models.behavior import UserBehaviorProfile
 from app.models.fraud import FraudEvent, FraudRule, VerificationAttempt
 from app.models.audit import AuditLog
+from app.models.beneficiary import BeneficiaryRiskProfile, BeneficiaryRiskCategory
 
 __all__ = [
     "User",
@@ -18,4 +19,6 @@ __all__ = [
     "FraudRule",
     "VerificationAttempt",
     "AuditLog",
+    "BeneficiaryRiskProfile",
+    "BeneficiaryRiskCategory",
 ]

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
   bvn_last4 VARCHAR(4),
   home_city VARCHAR(100),
   home_country VARCHAR(100) DEFAULT 'Nigeria',
+  face_descriptor JSON,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_users_email (email),
@@ -137,7 +138,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   ip_address VARCHAR(45),
   city VARCHAR(100),
   country VARCHAR(100),
-  risk_level ENUM('LOW','MEDIUM','HIGH','CRITICAL'),
+  risk_level ENUM('SAFE','CAUTION','VERIFY','HIGH_RISK','CRITICAL'),
   risk_score DECIMAL(5,2),
   risk_factors JSON,
   fraud_rule_version VARCHAR(20),
@@ -160,7 +161,7 @@ CREATE TABLE IF NOT EXISTS fraud_events (
   transaction_id CHAR(36) NOT NULL,
   user_id CHAR(36) NOT NULL,
   risk_level VARCHAR(20) NOT NULL,
-  risk_score DECIMAL(5,2) NOT NULL,
+  risk_score DECIMAL(5,2),
   risk_factors JSON NOT NULL,
   fraud_rule_version VARCHAR(20),
   status ENUM('open','reviewing','resolved_fraud','resolved_legitimate') DEFAULT 'open',
@@ -219,4 +220,22 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_audit_created (created_at),
   INDEX idx_audit_action (action)
+) ENGINE=InnoDB;
+
+-- --------------------------------------------------------------------------
+-- beneficiary_risk_profiles  (FinShield v2 -- Beneficiary Risk Analysis)
+-- --------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS beneficiary_risk_profiles (
+  id CHAR(36) PRIMARY KEY,
+  account_number VARCHAR(10) NOT NULL UNIQUE,
+  risk_category ENUM('TRUSTED','WATCHLISTED','HIGH_RISK') NOT NULL,
+  tags JSON,
+  reason TEXT,
+  fraud_report_count INT DEFAULT 0,
+  complaint_count INT DEFAULT 0,
+  added_by_admin_id CHAR(36),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_beneficiary_admin FOREIGN KEY (added_by_admin_id) REFERENCES admin_users(id),
+  INDEX idx_beneficiary_account (account_number)
 ) ENGINE=InnoDB;

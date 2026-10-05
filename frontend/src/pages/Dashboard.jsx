@@ -24,7 +24,7 @@ export default function Dashboard() {
   }, [])
 
   const completed = txns.filter(t => t.status === 'completed').length
-  const flagged = txns.filter(t => t.risk_level && t.risk_level !== 'LOW').length
+  const flagged = txns.filter(t => t.risk_level && t.risk_level !== 'SAFE').length
 
   return (
     <div className="page">

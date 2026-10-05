@@ -65,7 +65,7 @@ export default function AdminFraudAlerts() {
                       <span className="mono text-muted" style={{ fontSize: 12 }}>{a.transaction_reference}</span>
                     </div>
                     <h3 style={{ margin: '10px 0 2px', fontSize: 16 }}>{a.user_name} · ₦{Number(a.amount).toLocaleString()}</h3>
-                    <div className="text-muted" style={{ fontSize: 12 }}>{new Date(a.created_at).toLocaleString()} · Score {a.risk_score}/100</div>
+                    <div className="text-muted" style={{ fontSize: 12 }}>{new Date(a.created_at).toLocaleString()}</div>
                   </div>
                   {a.status === 'open' && (
                     <div style={{ display: 'flex', gap: 8 }}>

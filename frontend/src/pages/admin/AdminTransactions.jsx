@@ -36,7 +36,7 @@ export default function AdminTransactions() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          {['', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(r => (
+          {['', 'SAFE', 'CAUTION', 'VERIFY', 'HIGH_RISK', 'CRITICAL'].map(r => (
             <button key={r} className="scenario-btn" onClick={() => setRiskFilter(r)}
               style={riskFilter === r ? { borderColor: 'var(--accent)', color: 'var(--text-primary)' } : {}}>
               {r || 'All'}
@@ -114,8 +114,8 @@ export default function AdminTransactions() {
                     <div style={{ marginTop: 4 }}><StatusPill status={detail.status} /></div>
                   </div>
                   <div>
-                    <div className="stat-label">Risk score</div>
-                    <div className="mono" style={{ fontSize: 13.5, marginTop: 4 }}>{detail.risk_score} / 100 · rule v{detail.fraud_rule_version}</div>
+                    <div className="stat-label">Engine version</div>
+                    <div className="mono" style={{ fontSize: 13.5, marginTop: 4 }}>FinShield rule v{detail.fraud_rule_version}</div>
                   </div>
                 </div>
 
